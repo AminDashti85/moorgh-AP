@@ -47,7 +47,9 @@ public class LoginPanel {
                 String password = new String(passField.getPassword());
 
                 if (dbManager.loginUser(username, password)) {
-                    JOptionPane.showMessageDialog(panel, "Login Successful!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                    GamePanel gamePanel = new GamePanel(gameMain);
+                    gameMain.showPanel(gamePanel.getPanel());
+                    gamePanel.getPanel().requestFocusInWindow();
                 } else {
                     JOptionPane.showMessageDialog(panel, "Invalid Username or Password!", "Error", JOptionPane.ERROR_MESSAGE);
                 }
