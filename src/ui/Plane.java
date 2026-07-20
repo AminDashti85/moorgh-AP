@@ -30,6 +30,10 @@ public class Plane {
         if (this.x > 730) this.x = 730;
     }
 
+    public void decreaseLife() {
+        this.lives--;
+    }
+
     public int getX() { return x; }
     public int getY() { return y; }
     public Image getImage() { return image; }
