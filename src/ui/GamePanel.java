@@ -18,10 +18,12 @@ public class GamePanel {
     private ArrayList<Bullet> bullets;
     private ArrayList<Explosion> explosions;
     private ArrayList<Egg> eggs;
+    private ArrayList<PowerUp> powerUps;
     private Cell[][] grid;
 
     private long lastShootTime = 0;
     private long lastEnemyShootTime = 0;
+    private long freezeEndTime = 0;
 
     private boolean leftPressed = false;
     private boolean rightPressed = false;
@@ -41,6 +43,7 @@ public class GamePanel {
         this.bullets = new ArrayList<>();
         this.explosions = new ArrayList<>();
         this.eggs = new ArrayList<>();
+        this.powerUps = new ArrayList<>();
         this.grid = new Cell[5][8];
 
         for (int row = 0; row < 5; row++) {
@@ -63,6 +66,11 @@ public class GamePanel {
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
 
+                if (plane.hasShield()) {
+                    g.setColor(new Color(0, 255, 255, 100));
+                    g.fillOval(plane.getX() - 10, plane.getY() - 10, 70, 70);
+                }
+
                 g.drawImage(plane.getImage(), plane.getX(), plane.getY(), 50, 50, null);
 
                 g.setColor(Color.YELLOW);
@@ -84,6 +92,10 @@ public class GamePanel {
                     g.drawImage(egg.getImage(), egg.getX(), egg.getY(), 15, 20, null);
                 }
 
+                for (PowerUp pu : powerUps) {
+                    g.drawImage(pu.getImage(), pu.getX(), pu.getY(), 30, 30, null);
+                }
+
                 for (Explosion exp : explosions) {
                     g.drawImage(exp.getImage(), exp.getX(), exp.getY(), 40, 40, null);
                 }
@@ -94,6 +106,15 @@ public class GamePanel {
                 g.drawString("Level: " + level, 120, 20);
                 g.drawString("Lives: " + plane.getLives(), 220, 20);
                 g.drawString("Fire Power: " + plane.getFirePower(), 320, 20);
+
+                if (plane.hasRapidFire()) {
+                    g.setColor(Color.ORANGE);
+                    g.drawString("RAPID FIRE!", 450, 20);
+                }
+                if (System.currentTimeMillis() < freezeEndTime) {
+                    g.setColor(Color.CYAN);
+                    g.drawString("FROZEN!", 550, 20);
+                }
 
                 if (plane.getLives() <= 0) {
                     g.setFont(new Font("Arial", Font.BOLD, 40));
@@ -133,23 +154,31 @@ public class GamePanel {
                     return;
                 }
 
+                long currentTime = System.currentTimeMillis();
+                boolean isFrozen = currentTime < freezeEndTime;
+
                 if (leftPressed) plane.moveLeft();
                 if (rightPressed) plane.moveRight();
 
-                long currentTime = System.currentTimeMillis();
-
                 if (spacePressed) {
-                    if (currentTime - lastShootTime >= 300) {
-                        bullets.add(new Bullet(plane.getX() + 22, plane.getY()));
+                    long shootCooldown = plane.hasRapidFire() ? 100 : 300;
+                    if (currentTime - lastShootTime >= shootCooldown) {
+                        int fp = plane.getFirePower();
+                        int spacing = 15;
+                        int startOffsetX = -((fp - 1) * spacing) / 2;
+
+                        for (int i = 0; i < fp; i++) {
+                            bullets.add(new Bullet(plane.getX() + 22 + startOffsetX + (i * spacing), plane.getY()));
+                        }
                         lastShootTime = currentTime;
                     }
                 }
 
-                if (currentTime - lastEnemyShootTime >= 3000) {
+                if (!isFrozen && currentTime - lastEnemyShootTime >= 3000) {
                     ArrayList<Enemy> activeEnemies = new ArrayList<>();
                     for (int row = 0; row < 5; row++) {
                         for (int col = 0; col < 8; col++) {
-                            if (grid[row][col].hasEnemy()) {
+                            if (grid[row][col].hasEnemy() && !grid[row][col].isSpawning()) {
                                 activeEnemies.add(grid[row][col].getCurrentEnemy());
                             }
                         }
@@ -180,13 +209,15 @@ public class GamePanel {
 
                 for (int i = 0; i < eggs.size(); i++) {
                     Egg egg = eggs.get(i);
-                    egg.move();
+                    if (!isFrozen) egg.move();
 
                     Rectangle eggRect = new Rectangle(egg.getX(), egg.getY(), 15, 20);
 
                     if (eggRect.intersects(planeRect)) {
-                        plane.decreaseLife();
-                        explosions.add(new Explosion(plane.getX(), plane.getY()));
+                        if (!plane.hasShield()) {
+                            plane.decreaseLife();
+                            explosions.add(new Explosion(plane.getX(), plane.getY()));
+                        }
                         eggs.remove(i);
                         i--;
                         continue;
@@ -194,6 +225,40 @@ public class GamePanel {
 
                     if (egg.getY() > 600) {
                         eggs.remove(i);
+                        i--;
+                    }
+                }
+
+                for (int i = 0; i < powerUps.size(); i++) {
+                    PowerUp pu = powerUps.get(i);
+                    pu.move();
+                    Rectangle puRect = new Rectangle(pu.getX(), pu.getY(), 30, 30);
+
+                    if (puRect.intersects(planeRect)) {
+                        switch (pu.getType()) {
+                            case PowerUp.ADD_FIRE:
+                                plane.increaseFirePower();
+                                break;
+                            case PowerUp.RAPID_FIRE:
+                                plane.activateRapidFire(8000);
+                                break;
+                            case PowerUp.EXTRA_LIFE:
+                                plane.addLife();
+                                break;
+                            case PowerUp.SHIELD:
+                                plane.activateShield(10000);
+                                break;
+                            case PowerUp.FREEZE:
+                                freezeEndTime = currentTime + 3000;
+                                break;
+                        }
+                        powerUps.remove(i);
+                        i--;
+                        continue;
+                    }
+
+                    if (pu.getY() > 600) {
+                        powerUps.remove(i);
                         i--;
                     }
                 }
@@ -224,8 +289,26 @@ public class GamePanel {
                                         else if (enemy instanceof ZigzagEnemy) score += 20;
                                         else if (enemy instanceof ShooterEnemy) score += 25;
 
+                                        if (Math.random() < 0.20) {
+                                            int type = (int)(Math.random() * 5);
+                                            powerUps.add(new PowerUp(enemy.getX(), enemy.getY(), type));
+                                        }
+
                                         cell.decreaseCounter();
-                                        cell.setCurrentEnemy(null);
+
+                                        if (cell.getCounter() > 0) {
+                                            Enemy newEnemy;
+                                            if (enemy instanceof NormalEnemy) newEnemy = new NormalEnemy(0, 0);
+                                            else if (enemy instanceof FastEnemy) newEnemy = new FastEnemy(0, 0);
+                                            else if (enemy instanceof ZigzagEnemy) newEnemy = new ZigzagEnemy(0, 0);
+                                            else newEnemy = new ShooterEnemy(0, 0);
+
+                                            int startX = (Math.random() < 0.5) ? -40 : 800;
+                                            int startY = -40;
+                                            cell.spawnNewEnemy(newEnemy, startX, startY);
+                                        } else {
+                                            cell.setCurrentEnemy(null);
+                                        }
                                     }
                                     break;
                                 }
@@ -240,36 +323,58 @@ public class GamePanel {
                     }
                 }
 
-                boolean hitEdge = false;
-                if (gridMovingRight) {
-                    gridX += gridSpeed;
-                    if (gridX + (7 * 80) + 40 >= 780) {
-                        hitEdge = true;
-                        gridMovingRight = false;
+                if (!isFrozen) {
+                    boolean hitEdge = false;
+                    if (gridMovingRight) {
+                        gridX += gridSpeed;
+                        if (gridX + (7 * 80) + 40 >= 780) {
+                            hitEdge = true;
+                            gridMovingRight = false;
+                        }
+                    } else {
+                        gridX -= gridSpeed;
+                        if (gridX <= 20) {
+                            hitEdge = true;
+                            gridMovingRight = true;
+                        }
                     }
-                } else {
-                    gridX -= gridSpeed;
-                    if (gridX <= 20) {
-                        hitEdge = true;
-                        gridMovingRight = true;
+
+                    if (hitEdge) {
+                        gridY += 20;
                     }
-                }
 
-                if (hitEdge) {
-                    gridY += 20;
-                }
+                    for (int row = 0; row < 5; row++) {
+                        for (int col = 0; col < 8; col++) {
+                            Cell cell = grid[row][col];
+                            cell.setX((int)gridX + (col * 80));
+                            cell.setY((int)gridY + (row * 60));
 
-                for (int row = 0; row < 5; row++) {
-                    for (int col = 0; col < 8; col++) {
-                        Cell cell = grid[row][col];
-                        cell.setX((int)gridX + (col * 80));
-                        cell.setY((int)gridY + (row * 60));
+                            if (cell.hasEnemy()) {
+                                if (cell.isSpawning()) {
+                                    double dx = cell.getX() - cell.getCurrentX();
+                                    double dy = cell.getY() - cell.getCurrentY();
+                                    double dist = Math.sqrt(dx * dx + dy * dy);
 
-                        if (cell.hasEnemy()) {
-                            Enemy enemy = cell.getCurrentEnemy();
-                            enemy.setX(cell.getX());
-                            enemy.setY(cell.getY());
-                            enemy.move();
+                                    if (dist < 5) {
+                                        cell.setSpawning(false);
+                                        Enemy enemy = cell.getCurrentEnemy();
+                                        enemy.setX(cell.getX());
+                                        enemy.setY(cell.getY());
+                                    } else {
+                                        Enemy enemy = cell.getCurrentEnemy();
+                                        double speed = (enemy instanceof FastEnemy) ? 8.0 : 4.0;
+                                        cell.setCurrentX(cell.getCurrentX() + (dx / dist) * speed);
+                                        cell.setCurrentY(cell.getCurrentY() + (dy / dist) * speed);
+                                        enemy.setX((int)cell.getCurrentX());
+                                        enemy.setY((int)cell.getCurrentY());
+                                    }
+                                } else {
+                                    Enemy enemy = cell.getCurrentEnemy();
+                                    enemy.setX(cell.getX());
+                                    enemy.setY(cell.getY());
+                                    enemy.move();
+                                }
+                            }
                         }
                     }
                 }

@@ -11,6 +11,9 @@ public class Plane {
     private int firePower;
     private Image image;
 
+    private long shieldEndTime = 0;
+    private long rapidFireEndTime = 0;
+
     public Plane(int x, int y) {
         this.x = x;
         this.y = y;
@@ -31,7 +34,35 @@ public class Plane {
     }
 
     public void decreaseLife() {
-        this.lives--;
+        if (!hasShield()) {
+            this.lives--;
+        }
+    }
+
+    public void addLife() {
+        if (this.lives < 5) {
+            this.lives++;
+        }
+    }
+
+    public void increaseFirePower() {
+        this.firePower++;
+    }
+
+    public void activateShield(long durationMillis) {
+        this.shieldEndTime = System.currentTimeMillis() + durationMillis;
+    }
+
+    public void activateRapidFire(long durationMillis) {
+        this.rapidFireEndTime = System.currentTimeMillis() + durationMillis;
+    }
+
+    public boolean hasShield() {
+        return System.currentTimeMillis() < shieldEndTime;
+    }
+
+    public boolean hasRapidFire() {
+        return System.currentTimeMillis() < rapidFireEndTime;
     }
 
     public int getX() { return x; }
