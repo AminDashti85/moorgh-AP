@@ -20,6 +20,7 @@ public class GamePanel {
     private ArrayList<Egg> eggs;
     private ArrayList<PowerUp> powerUps;
     private Cell[][] grid;
+    private Boss currentBoss = null;
 
     private long lastShootTime = 0;
     private long lastEnemyShootTime = 0;
@@ -44,22 +45,8 @@ public class GamePanel {
         this.explosions = new ArrayList<>();
         this.eggs = new ArrayList<>();
         this.powerUps = new ArrayList<>();
-        this.grid = new Cell[5][8];
 
-        for (int row = 0; row < 5; row++) {
-            for (int col = 0; col < 8; col++) {
-                int startX = (int)gridX + (col * 80);
-                int startY = (int)gridY + (row * 60);
-                Enemy initialEnemy;
-
-                if (row == 0) initialEnemy = new ShooterEnemy(startX, startY);
-                else if (row == 1) initialEnemy = new ZigzagEnemy(startX, startY);
-                else if (row == 2) initialEnemy = new FastEnemy(startX, startY);
-                else initialEnemy = new NormalEnemy(startX, startY);
-
-                grid[row][col] = new Cell(startX, startY, 2, initialEnemy);
-            }
-        }
+        loadLevel();
 
         panel = new JPanel() {
             @Override
@@ -78,12 +65,25 @@ public class GamePanel {
                     g.fillRect(bullet.getX(), bullet.getY(), 6, 15);
                 }
 
-                for (int row = 0; row < 5; row++) {
-                    for (int col = 0; col < 8; col++) {
-                        Cell cell = grid[row][col];
-                        if (cell.hasEnemy()) {
-                            Enemy e = cell.getCurrentEnemy();
-                            g.drawImage(e.getImage(), e.getX(), e.getY(), 40, 40, null);
+                if (currentBoss != null) {
+                    g.drawImage(currentBoss.getImage(), currentBoss.getX(), currentBoss.getY(), 150, 150, null);
+
+                    g.setColor(Color.RED);
+                    g.fillRect(200, 10, 400, 15);
+                    g.setColor(Color.GREEN);
+                    int hpWidth = (int)((currentBoss.getCurrentHp() / (double)currentBoss.getMaxHp()) * 400);
+                    if (hpWidth < 0) hpWidth = 0;
+                    g.fillRect(200, 10, hpWidth, 15);
+                    g.setColor(Color.WHITE);
+                    g.drawRect(200, 10, 400, 15);
+                } else {
+                    for (int row = 0; row < grid.length; row++) {
+                        for (int col = 0; col < grid[0].length; col++) {
+                            Cell cell = grid[row][col];
+                            if (cell.hasEnemy()) {
+                                Enemy e = cell.getCurrentEnemy();
+                                g.drawImage(e.getImage(), e.getX(), e.getY(), 40, 40, null);
+                            }
                         }
                     }
                 }
@@ -120,6 +120,10 @@ public class GamePanel {
                     g.setFont(new Font("Arial", Font.BOLD, 40));
                     g.setColor(Color.RED);
                     g.drawString("GAME OVER", 280, 300);
+                } else if (level > 8) {
+                    g.setFont(new Font("Arial", Font.BOLD, 40));
+                    g.setColor(Color.GREEN);
+                    g.drawString("YOU WIN!", 300, 300);
                 }
             }
         };
@@ -131,7 +135,7 @@ public class GamePanel {
         panel.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
-                if (plane.getLives() <= 0) return;
+                if (plane.getLives() <= 0 || level > 8) return;
                 int key = e.getKeyCode();
                 if (key == KeyEvent.VK_LEFT) leftPressed = true;
                 if (key == KeyEvent.VK_RIGHT) rightPressed = true;
@@ -150,7 +154,7 @@ public class GamePanel {
         timer = new Timer(16, new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (plane.getLives() <= 0) {
+                if (plane.getLives() <= 0 || level > 8) {
                     return;
                 }
 
@@ -174,10 +178,35 @@ public class GamePanel {
                     }
                 }
 
-                if (!isFrozen && currentTime - lastEnemyShootTime >= 3000) {
+                if (currentBoss != null) {
+                    if (!isFrozen) {
+                        currentBoss.move();
+                        if (currentTime - lastEnemyShootTime >= 1500) {
+                            int cx = currentBoss.getX() + 75;
+                            int cy = currentBoss.getY() + 75;
+
+                            if (currentBoss instanceof BossLevel4) {
+                                eggs.add(new Egg(cx, cy + 75, 0, 4, false));
+                                eggs.add(new Egg(cx, cy - 75, 0, -4, false));
+                                eggs.add(new Egg(cx - 75, cy, -4, 0, false));
+                                eggs.add(new Egg(cx + 75, cy, 4, 0, false));
+                            } else {
+                                eggs.add(new Egg(cx, cy + 75, 0, 5, true));
+                                eggs.add(new Egg(cx, cy - 75, 0, -5, true));
+                                eggs.add(new Egg(cx - 75, cy, -5, 0, true));
+                                eggs.add(new Egg(cx + 75, cy, 5, 0, true));
+                                eggs.add(new Egg(cx + 50, cy + 50, 4, 4, true));
+                                eggs.add(new Egg(cx - 50, cy + 50, -4, 4, true));
+                                eggs.add(new Egg(cx + 50, cy - 50, 4, -4, true));
+                                eggs.add(new Egg(cx - 50, cy - 50, -4, -4, true));
+                            }
+                            lastEnemyShootTime = currentTime;
+                        }
+                    }
+                } else if (!isFrozen && currentTime - lastEnemyShootTime >= 3000) {
                     ArrayList<Enemy> activeEnemies = new ArrayList<>();
-                    for (int row = 0; row < 5; row++) {
-                        for (int col = 0; col < 8; col++) {
+                    for (int row = 0; row < grid.length; row++) {
+                        for (int col = 0; col < grid[0].length; col++) {
                             if (grid[row][col].hasEnemy() && !grid[row][col].isSpawning()) {
                                 activeEnemies.add(grid[row][col].getCurrentEnemy());
                             }
@@ -223,7 +252,7 @@ public class GamePanel {
                         continue;
                     }
 
-                    if (egg.getY() > 600) {
+                    if (egg.getY() > 600 || egg.getY() < 0 || egg.getX() < 0 || egg.getX() > 800) {
                         eggs.remove(i);
                         i--;
                     }
@@ -267,54 +296,68 @@ public class GamePanel {
                     Bullet b = bullets.get(i);
                     b.move();
                     boolean bulletHit = false;
-
                     Rectangle bulletRect = new Rectangle(b.getX(), b.getY(), 6, 15);
 
-                    for (int row = 0; row < 5; row++) {
-                        for (int col = 0; col < 8; col++) {
-                            Cell cell = grid[row][col];
-                            if (cell.hasEnemy()) {
-                                Enemy enemy = cell.getCurrentEnemy();
-                                Rectangle enemyRect = new Rectangle(enemy.getX(), enemy.getY(), 40, 40);
+                    if (currentBoss != null) {
+                        Rectangle bossRect = new Rectangle(currentBoss.getX(), currentBoss.getY(), 150, 150);
+                        if (bulletRect.intersects(bossRect)) {
+                            currentBoss.takeDamage(1);
+                            bulletHit = true;
+                            explosions.add(new Explosion(b.getX() - 15, b.getY() - 15));
 
-                                if (bulletRect.intersects(enemyRect)) {
-                                    enemy.takeDamage(1);
-                                    bulletHit = true;
-
-                                    if (enemy.isDead()) {
-                                        explosions.add(new Explosion(enemy.getX(), enemy.getY()));
-
-                                        if (enemy instanceof NormalEnemy) score += 10;
-                                        else if (enemy instanceof FastEnemy) score += 15;
-                                        else if (enemy instanceof ZigzagEnemy) score += 20;
-                                        else if (enemy instanceof ShooterEnemy) score += 25;
-
-                                        if (Math.random() < 0.20) {
-                                            int type = (int)(Math.random() * 5);
-                                            powerUps.add(new PowerUp(enemy.getX(), enemy.getY(), type));
-                                        }
-
-                                        cell.decreaseCounter();
-
-                                        if (cell.getCounter() > 0) {
-                                            Enemy newEnemy;
-                                            if (enemy instanceof NormalEnemy) newEnemy = new NormalEnemy(0, 0);
-                                            else if (enemy instanceof FastEnemy) newEnemy = new FastEnemy(0, 0);
-                                            else if (enemy instanceof ZigzagEnemy) newEnemy = new ZigzagEnemy(0, 0);
-                                            else newEnemy = new ShooterEnemy(0, 0);
-
-                                            int startX = (Math.random() < 0.5) ? -40 : 800;
-                                            int startY = -40;
-                                            cell.spawnNewEnemy(newEnemy, startX, startY);
-                                        } else {
-                                            cell.setCurrentEnemy(null);
-                                        }
-                                    }
-                                    break;
-                                }
+                            if (currentBoss.getCurrentHp() <= 0) {
+                                explosions.add(new Explosion(currentBoss.getX() + 50, currentBoss.getY() + 50));
+                                score += 500;
+                                currentBoss = null;
                             }
                         }
-                        if (bulletHit) break;
+                    } else {
+                        for (int row = 0; row < grid.length; row++) {
+                            for (int col = 0; col < grid[0].length; col++) {
+                                Cell cell = grid[row][col];
+                                if (cell.hasEnemy()) {
+                                    Enemy enemy = cell.getCurrentEnemy();
+                                    Rectangle enemyRect = new Rectangle(enemy.getX(), enemy.getY(), 40, 40);
+
+                                    if (bulletRect.intersects(enemyRect)) {
+                                        enemy.takeDamage(1);
+                                        bulletHit = true;
+
+                                        if (enemy.isDead()) {
+                                            explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+
+                                            if (enemy instanceof NormalEnemy) score += 10;
+                                            else if (enemy instanceof FastEnemy) score += 15;
+                                            else if (enemy instanceof ZigzagEnemy) score += 20;
+                                            else if (enemy instanceof ShooterEnemy) score += 25;
+
+                                            if (Math.random() < 0.20) {
+                                                int type = (int)(Math.random() * 5);
+                                                powerUps.add(new PowerUp(enemy.getX(), enemy.getY(), type));
+                                            }
+
+                                            cell.decreaseCounter();
+
+                                            if (cell.getCounter() > 0) {
+                                                Enemy newEnemy;
+                                                if (enemy instanceof NormalEnemy) newEnemy = new NormalEnemy(0, 0);
+                                                else if (enemy instanceof FastEnemy) newEnemy = new FastEnemy(0, 0);
+                                                else if (enemy instanceof ZigzagEnemy) newEnemy = new ZigzagEnemy(0, 0);
+                                                else newEnemy = new ShooterEnemy(0, 0);
+
+                                                int startX = (Math.random() < 0.5) ? -40 : 800;
+                                                int startY = -40;
+                                                cell.spawnNewEnemy(newEnemy, startX, startY);
+                                            } else {
+                                                cell.setCurrentEnemy(null);
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                            if (bulletHit) break;
+                        }
                     }
 
                     if (bulletHit || b.getY() < 0) {
@@ -323,11 +366,11 @@ public class GamePanel {
                     }
                 }
 
-                if (!isFrozen) {
+                if (currentBoss == null && !isFrozen) {
                     boolean hitEdge = false;
                     if (gridMovingRight) {
                         gridX += gridSpeed;
-                        if (gridX + (7 * 80) + 40 >= 780) {
+                        if (gridX + (grid[0].length * 80) + 40 >= 780) {
                             hitEdge = true;
                             gridMovingRight = false;
                         }
@@ -343,8 +386,8 @@ public class GamePanel {
                         gridY += 20;
                     }
 
-                    for (int row = 0; row < 5; row++) {
-                        for (int col = 0; col < 8; col++) {
+                    for (int row = 0; row < grid.length; row++) {
+                        for (int col = 0; col < grid[0].length; col++) {
                             Cell cell = grid[row][col];
                             cell.setX((int)gridX + (col * 80));
                             cell.setY((int)gridY + (row * 60));
@@ -379,10 +422,79 @@ public class GamePanel {
                     }
                 }
 
+                boolean levelComplete = true;
+                if (level == 4 || level == 8) {
+                    if (currentBoss != null) levelComplete = false;
+                } else {
+                    for (int row = 0; row < grid.length; row++) {
+                        for (int col = 0; col < grid[0].length; col++) {
+                            if (grid[row][col].getCounter() > 0 || grid[row][col].hasEnemy() || grid[row][col].isSpawning()) {
+                                levelComplete = false;
+                                break;
+                            }
+                        }
+                        if (!levelComplete) break;
+                    }
+                }
+
+                if (levelComplete) {
+                    if (level != 4 && level != 8) score += 200;
+                    level++;
+                    if (level <= 8) {
+                        loadLevel();
+                    }
+                }
+
                 panel.repaint();
             }
         });
         timer.start();
+    }
+
+    private void loadLevel() {
+        gridX = 50;
+        gridY = 50;
+        gridMovingRight = true;
+        bullets.clear();
+        eggs.clear();
+        powerUps.clear();
+        explosions.clear();
+
+        if (level == 4) {
+            grid = new Cell[0][0];
+            currentBoss = new BossLevel4(325, 50);
+            gridSpeed = 0;
+        } else if (level == 8) {
+            grid = new Cell[0][0];
+            currentBoss = new BossLevel8(325, 50);
+            gridSpeed = 0;
+        } else {
+            currentBoss = null;
+            grid = new Cell[5][8];
+            int initialCounter = (level >= 5) ? 3 : (level == 3 ? 3 : 2);
+            gridSpeed = 1.0 + (level * 0.2);
+
+            for (int row = 0; row < 5; row++) {
+                for (int col = 0; col < 8; col++) {
+                    int startX = (int)gridX + (col * 80);
+                    int startY = (int)gridY + (row * 60);
+                    Enemy initialEnemy;
+
+                    if (level >= 5) {
+                        if (row == 0 || row == 1) initialEnemy = new ShooterEnemy(startX, startY);
+                        else if (row == 2) initialEnemy = new ZigzagEnemy(startX, startY);
+                        else initialEnemy = new FastEnemy(startX, startY);
+                    } else {
+                        if (row == 0) initialEnemy = new ShooterEnemy(startX, startY);
+                        else if (row == 1) initialEnemy = new ZigzagEnemy(startX, startY);
+                        else if (row == 2) initialEnemy = new FastEnemy(startX, startY);
+                        else initialEnemy = new NormalEnemy(startX, startY);
+                    }
+
+                    grid[row][col] = new Cell(startX, startY, initialCounter, initialEnemy);
+                }
+            }
+        }
     }
 
     public JPanel getPanel() {
