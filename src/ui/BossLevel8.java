@@ -12,7 +12,7 @@ public class BossLevel8 extends Boss {
         super(x, y, 100);
         this.exactX = x;
         this.exactY = y;
-        this.image = new ImageIcon("src/images/boss8.png").getImage();
+        this.image = new ImageIcon("src/images/boss2.png").getImage();
     }
 
     @Override

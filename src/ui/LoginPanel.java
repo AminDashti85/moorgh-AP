@@ -1,6 +1,7 @@
 package ui;
 
 import database.DatabaseManager;
+import database.User;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -47,9 +48,16 @@ public class LoginPanel {
                 String password = new String(passField.getPassword());
 
                 if (dbManager.loginUser(username, password)) {
-                    GamePanel gamePanel = new GamePanel(gameMain);
-                    gameMain.showPanel(gamePanel.getPanel());
-                    gamePanel.getPanel().requestFocusInWindow();
+                    gameMain.setLoggedInUsername(username);
+                    User user = dbManager.getUser(username);
+                    if (user != null) {
+                        gameMain.getSoundManager().updateSettings(user.getSoundSettings());
+                    }
+
+                    JOptionPane.showMessageDialog(panel, "Login Successful! Welcome " + username, "Success", JOptionPane.INFORMATION_MESSAGE);
+                    gameMain.getMainMenu().updateLoginStatus();
+                    gameMain.showPanel(gameMain.getMainMenu().getPanel());
+
                 } else {
                     JOptionPane.showMessageDialog(panel, "Invalid Username or Password!", "Error", JOptionPane.ERROR_MESSAGE);
                 }
